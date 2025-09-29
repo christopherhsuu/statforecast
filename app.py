@@ -9,11 +9,9 @@ app = Flask(__name__)
 @app.route("/predict", methods=["POST"])
 def predict():
     data = request.json
-    player = data.get("player", "Unknown")
-    return jsonify({
-        "player": player,
-        "projection": {"HR": 30, "OPS": 0.9}  # dummy response for testing
-    })
+    player = data["player"]
+    projection = project_next_season(player, batting, model)
+    return jsonify(projection)
 
 if __name__ == "__main__":
     # For local testing
