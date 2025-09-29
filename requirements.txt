@@ -1,0 +1,7 @@
+shiny
+pandas
+numpy
+matplotlib
+plotly
+scikit-learn
+pybaseball
