@@ -1,38 +1,55 @@
+# app.py
 from shiny import App, render, ui
+import pandas as pd
+import traceback
+
 from prediction import load_data, train_model, project_next_season
 
-# Load data + train model once at startup
-batting = load_data()
-model = train_model(batting)
+INIT_ERROR = ""  # will show in UI if init fails
+
+try:
+    batting = load_data()
+    model = train_model(batting)
+    player_choices = sorted(pd.Series(batting["Name"]).dropna().unique().tolist())
+except Exception:
+    INIT_ERROR = traceback.format_exc()
+    batting = pd.DataFrame()
+    model = None
+    player_choices = []
 
 app_ui = ui.page_fluid(
-    ui.h2("StatForecast App"),
+    ui.h2("StatForecast"),
+    ui.markdown("Select a player to see **projected next-season stats**."),
 
-    # Select a player
-    ui.input_selectize(
-        "player",
-        "Choose a player:",
-        choices=sorted(batting["Name"].unique())
-    ),
+    # show init errors (missing columns, missing sklearn, etc.)
+    ui.output_text_verbatim("init_error"),
 
-    # Output: show projected stats
+    ui.input_selectize("player", "Choose a player:", choices=player_choices, multiple=False),
     ui.output_table("projection")
 )
 
 def server(input, output, session):
 
     @output
+    @render.text
+    def init_error():
+        return INIT_ERROR  # empty string if ok
+
+    @output
     @render.table
     def projection():
-        # Run projection for the chosen player
-        preds = project_next_season(input.player(), batting, model)
+        if INIT_ERROR:
+            return pd.DataFrame({"error": ["App failed during startup. See error above."]})
+        if not input.player():
+            return pd.DataFrame({"info": ["Pick a player"]})
 
-        if preds is None:
-            return {"Error": ["No data found for this player"]}
-
-        # Turn dictionary into a table-like object
-        import pandas as pd
-        df = pd.DataFrame(preds, index=[0])
-        return df
+        try:
+            preds = project_next_season(input.player(), batting, model)
+            if preds is None:
+                return pd.DataFrame({"error": [f"No rows for '{input.player()}'"]})
+            return pd.DataFrame(preds, index=[0])
+        except Exception:
+            tb = traceback.format_exc()
+            return pd.DataFrame({"exception": [tb]})
 
 app = App(app_ui, server)
