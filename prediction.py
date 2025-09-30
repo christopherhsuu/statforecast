@@ -6,6 +6,11 @@ for col in ['BB%', 'K%']:
 import pandas as pd
 import numpy as np
 
+def load_data():
+    df = pd.read_csv("fangraphs_hitters_2010_2024.csv")
+    return df
+
+
 pd.set_option('display.float_format', '{:.4f}'.format)
 
 def get_career_stats(player_name, data):
