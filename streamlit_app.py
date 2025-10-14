@@ -1,33 +1,85 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from prediction import project_next_season, load_data, train_model
+from pathlib import Path
 
-st.title("StatForecast: Player Performance Predictor")
-st.write("Upload player data and forecast expected performance based on historical metrics.")
+from prediction import load_data, train_model, load_model, project_next_season, build_features
 
-# File upload
-uploaded_file = st.file_uploader("Upload CSV data", type="csv")
+MODEL_PATH = Path("models/rf_multioutput.joblib")
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.write("### Data Preview")
-    st.dataframe(df.head())
 
-    # User controls
-    selected_player = st.selectbox("Select a player", df["Name"].unique())
+st.set_page_config(page_title="StatForecast", layout="wide")
+st.title("StatForecast: Next-Season Player Predictor")
 
-    # Generate prediction
-    d = load_data()
-    m = train_model(d)
-    pred = project_next_season(df[df['Name'] == selected_player], d, m)
-    st.metric(label="Predicted wOBA", value=round(pred, 3))
+with st.sidebar:
+    st.header("Data & Model")
+    upload = st.file_uploader("Upload CSV (optional)", type="csv")
+    retrain = st.button("Retrain model")
+    st.markdown("---")
+    st.write("Model file: ")
+    st.write(str(MODEL_PATH))
 
-    # Visualization
-    fig, ax = plt.subplots()
-    ax.scatter(df["xwOBA"], df["launch_angle"], alpha=0.6)
-    ax.set_xlabel("xwOBA")
-    ax.set_ylabel("Launch Angle (°)")
-    st.pyplot(fig)
+# Load data (uploaded takes precedence)
+if upload:
+    df = pd.read_csv(upload)
 else:
-    st.info("Please upload your dataset to start the analysis.")
+    df = load_data()
+
+st.write("### Data preview")
+st.dataframe(df.head())
+
+# Model load or train
+model = None
+metadata = None
+if MODEL_PATH.exists() and not retrain:
+    try:
+        model, metadata = load_model(str(MODEL_PATH))
+        st.sidebar.success(f"Loaded model (rmse={metadata.get('rmse'):.3f})")
+    except Exception as e:
+        st.sidebar.error(f"Failed to load model: {e}")
+
+if retrain or model is None:
+    with st.spinner('Training model... this may take a minute'):
+        model, metadata = train_model(df, save_path=str(MODEL_PATH))
+    st.sidebar.success(f"Model trained (rmse={metadata.get('rmse'):.3f})")
+
+st.sidebar.markdown("---")
+st.sidebar.write(f"Rows used for training: {metadata.get('train_rows', '?')}")
+
+# Player lookup
+player_input = st.text_input("Player name (exact match)")
+search_btn = st.button("Predict")
+
+if search_btn and player_input:
+    preds = project_next_season(player_input, df, model)
+    if preds is None:
+        st.error("Player not found in dataset (check exact name).")
+    else:
+        st.success(f"Predicted next-season stats for {player_input}")
+        cols = st.columns(4)
+        i = 0
+        for stat, val in preds.items():
+            cols[i % 4].metric(label=stat, value=val)
+            i += 1
+
+        # show player's history plot for a couple of stats
+        fe = build_features(df)
+        player_hist = df[df['Name'] == player_input].sort_values('Season')
+        if not player_hist.empty:
+            fig, ax = plt.subplots(figsize=(8, 3))
+            ax.plot(player_hist['Season'], player_hist['wOBA'], marker='o', label='wOBA')
+            if 'ISO' in player_hist.columns:
+                ax.plot(player_hist['Season'], player_hist['ISO'], marker='x', label='ISO')
+            ax.set_xlabel('Season')
+            ax.set_title(f'Historical wOBA / ISO for {player_input}')
+            ax.legend()
+            st.pyplot(fig)
+        else:
+            st.info('No historical rows to plot for this player.')
+
+        st.markdown('---')
+        st.write('Model metadata')
+        st.json(metadata)
+
+else:
+    st.info('Enter a player name (exact match) and press Predict.')
