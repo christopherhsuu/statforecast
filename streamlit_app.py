@@ -6,13 +6,24 @@ from pathlib import Path
 from prediction import load_data, train_model, load_model, project_next_season, build_features
 
 MODEL_PATH = Path("models/rf_multioutput.joblib")
-# If you host the model externally (recommended for repo size), set MODEL_URL to
-# the public URL or GitHub Release asset URL. You can also set via environment.
-MODEL_URL = st.secrets.get('MODEL_URL') if 'MODEL_URL' in st.secrets else None
-if MODEL_URL is None:
-    # allow environment variable fallback
-    import os
-    MODEL_URL = os.environ.get('MODEL_URL')
+# Preferred: read MODEL_URL from environment so local runs (export MODEL_URL=...) work.
+import os
+MODEL_URL = os.environ.get('MODEL_URL')
+
+# If present, prefer Streamlit secrets (used on Streamlit Cloud). Wrap in try/except
+# because accessing st.secrets raises StreamlitSecretNotFoundError when no secrets
+# file exists locally.
+try:
+    secret_val = None
+    try:
+        secret_val = st.secrets.get('MODEL_URL')
+    except Exception:
+        secret_val = None
+    if secret_val:
+        MODEL_URL = secret_val
+except Exception:
+    # be defensive: ignore any error coming from secrets parsing
+    pass
 
 def _download_file(url: str, dst: Path) -> None:
     """Download a file to dst (streamed)."""
