@@ -1,0 +1,14 @@
+jupyter
+shiny
+pandas
+numpy
+matplotlib
+plotly
+scikit-learn
+pybaseball
+
+# Web UI
+streamlit
+
+# Model persistence
+joblib
