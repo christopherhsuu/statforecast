@@ -2,5 +2,4 @@
 # This prevents committing large or sensitive CSV datasets into the repo.
 *.csv
 
-# If you want to keep a specific CSV tracked, add a negation rule like:
-# !data/my_important.csv
+models/*.joblib
